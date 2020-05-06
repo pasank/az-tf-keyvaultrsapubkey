@@ -62,32 +62,13 @@ resource "azurerm_key_vault_key" "generated" {
   ]
 }
 
-output public_key_exponent {
-  value = azurerm_key_vault_key.generated.e
-}
-
-output public_key_modulus {
-  value = azurerm_key_vault_key.generated.n
-}
-
-# resource "local_file" "exponent" {
-#   content  = azurerm_key_vault_key.generated.e
-#   filename = "exponent.txt"
-# }
-
-# resource "local_file" "modulus" {
-#   content  = azurerm_key_vault_key.generated.n
-#   filename = "modulus.txt"
-# }
-
-
 resource "null_resource" "gen_e_n" {
-#   triggers = {
-#     cluster_instance_ids = "${join(",", aws_instance.cluster.*.id)}"
-#   }
+  triggers = {
+    always_run = "${timestamp()}"
+  }
 
   provisioner "local-exec" {
-    command = "echo -n ${azurerm_key_vault_key.generated.e} | base64 --decode | xxd -p -u | tr -d \\n > hex_exponent && echo -n ${azurerm_key_vault_key.generated.n} | base64 --decode | xxd -p -u | tr -d \\n > hex_modulus"
+    command = "echo -n ${azurerm_key_vault_key.generated.e} | base64 --decode | xxd -p -u | tr -d '\n' > hex_exponent && echo -n ${azurerm_key_vault_key.generated.n} | base64 --decode | xxd -p -u | tr -d '\n' > hex_modulus"
   }
 }
 
@@ -98,7 +79,7 @@ data "local_file" "hex_exponent" {
 }
 
 data "local_file" "hex_modulus" {
-    filename = "hex_exponent"
+    filename = "hex_modulus"
 
     depends_on = [null_resource.gen_e_n]
 }
@@ -109,6 +90,8 @@ data "template_file" "asn1" {
     hex_exponent_value = data.local_file.hex_exponent.content
     hex_modulus_value = data.local_file.hex_modulus.content
   }
+
+  depends_on = [data.local_file.hex_exponent, data.local_file.hex_modulus]
 }
 
 resource "local_file" "asn1_filled" {
@@ -117,21 +100,13 @@ resource "local_file" "asn1_filled" {
 }
 
 resource "null_resource" "gen_key_file" {
-#   triggers = {
-#     cluster_instance_ids = "${join(",", aws_instance.cluster.*.id)}"
-#   }
+  triggers = {
+    always_run = "${timestamp()}"
+  }
 
   provisioner "local-exec" {
     command = "openssl asn1parse -genconf def.asn1.tpl.filled -out pubkey.der -noout && openssl rsa -in pubkey.der -inform der -pubin -out pubkey.pem && ssh-keygen -f pubkey.pem -i -mPKCS8 > pubkey.rsa"
   }
+
+  depends_on = [data.template_file.asn1]
 }
-
-data "local_file" "rsa_pub_key" {
-    filename = "pubkey.rsa"
-
-    depends_on = [null_resource.gen_key_file]
-}
-
-# output rsa_pub_key {
-#     value = data.local_file.rsa_pub_key
-# }

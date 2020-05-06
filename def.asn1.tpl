@@ -16,4 +16,4 @@ parameter=NULL
 [rsapubkey]
 n=INTEGER:0x${hex_modulus_value}
 
-e=INTEGER:0x{hex_exponent_value}
+e=INTEGER:0x${hex_exponent_value}
